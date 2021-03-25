@@ -1,0 +1,196 @@
+name: Trigger AKS connectivity test (see ConformanceAKS for results)
+
+on:
+  pull_request_target:
+    types:
+      - "labeled"
+  # WARNING FOR REVIEWERS
+  # The `pull_request` webhook event should never be uncommented on `master`,
+  # so as not to allow access to or leak repo's secrets.
+  # Please be extra careful when reviewing changes to GitHub workflows.
+  pull_request:
+   types:
+     - "labeled"
+  push:
+    branches:
+      - master
+
+env:
+  name: cilium-cli-ci-${{ github.run_id }}
+  location: westeurope
+  check_name: ConformanceAKS
+  check_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  concurrent-runs-guard:
+    if: ${{ github.event.label.name == 'ci-run/aks' || github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - name: Check if a concurrent job is already running for the same workflow
+        id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.0
+        with:
+          concurrent_skipping: always # disallow concurrent runs
+          skip_after_successful_duplicate: false # allow re-runs even if PR state did not change
+
+  installation-and-connectivity:
+    needs: concurrent-runs-guard
+    if: ${{ needs.concurrent-runs-guard.outputs.should_skip != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Set image tag
+        id: vars
+        run: |
+          if [ ${{ github.event.pull_request.head.sha }} != "" ]; then
+            echo ::set-output name=tag::${{ github.event.pull_request.head.sha }}
+          else
+            echo ::set-output name=tag::${{ github.sha }}
+          fi
+
+      - name: Set status check to pending
+        if: ${{ always() }}
+        uses: Sibz/github-status-action@v1.1.4
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ steps.vars.outputs.tag }}
+          context: ${{ env.check_name }}
+          description: Connectivity test in progress...
+          state: pending
+          target_url: ${{ env.check_url }}
+
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install Cilium CLI
+        run: |
+          curl -LO https://github.com/cilium/cilium-cli/releases/download/v0.4/cilium-linux-amd64.tar.gz
+          sudo tar xzvfC cilium-linux-amd64.tar.gz /usr/bin
+          rm cilium-linux-amd64.tar.gz
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_PR_SP_CREDS }}
+
+      - name: Display Azure CLI info
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.0.72
+          inlineScript: |
+            az account show
+
+      - name: Create AKS cluster
+        run: |
+          az group create \
+            --name ${{ env.name }} \
+            --location ${{ env.location }} \
+            --tags "owner=${{ github.event.pull_request.number || github.sha }}"
+          az aks create \
+            --resource-group ${{ env.name }} \
+            --name ${{ env.name }} \
+            --location ${{ env.location }} \
+            --network-plugin azure \
+            --generate-ssh-keys \
+            --node-count 2
+
+      - name: Get cluster credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.name }} \
+            --name ${{ env.name }}
+
+      - name: Wait for images to be available
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/cilium-ci/tag/${{ steps.vars.outputs.tag }}/images" &> /dev/null; do sleep 45s; done
+          until curl --silent -f -lSL "https://quay.io/api/v1/repository/${{ github.repository_owner }}/operator-azure-ci/tag/${{ steps.vars.outputs.tag }}/images" &> /dev/null; do sleep 45s; done
+
+      - name: Install Cilium
+        run: |
+          cilium install \
+            --cluster-name ${{ env.name }} \
+            --wait=false \
+            --config monitor-aggregation=none \
+            --azure-resource-group ${{ env.name }} \
+            --azure-tenant-id ${{ secrets.AZURE_PR_SP_TENANT_ID}} \
+            --azure-client-id ${{ secrets.AZURE_PR_SP_CLIENT_ID }} \
+            --azure-client-secret ${{ secrets.AZURE_PR_SP_CLIENT_SECRET }} \
+            --agent-image=quay.io/${{ github.repository_owner }}/cilium-ci \
+            --operator-image=quay.io/${{ github.repository_owner }}/operator-azure-ci \
+            --version ${{ steps.vars.outputs.tag }}
+
+      - name: Enable Relay
+        run: |
+          cilium hubble enable
+
+      - name: Wait for Cilium status to be ready
+        run: |
+          cilium status --wait
+
+      - name: Port forward Relay
+        run: |
+          kubectl port-forward -n kube-system deployment/hubble-relay 4245:4245&
+          sleep 5s
+
+      - name: Run connectivity test
+        run: |
+          cilium connectivity test
+
+      - name: Post-test information gathering
+        if: ${{ always() }}
+        run: |
+          cilium status
+          kubectl get pods --all-namespaces -o wide
+          curl -sLO https://github.com/cilium/cilium-sysdump/releases/latest/download/cilium-sysdump.zip
+          python cilium-sysdump.zip --output cilium-sysdump-out
+        shell: bash {0}
+
+      - name: Clean up AKS
+        if: ${{ always() }}
+        run: |
+          az group delete --name ${{ env.name }} --yes
+
+      - name: Upload artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: cilium-sysdump-out.zip
+          path: cilium-sysdump-out.zip
+          retention-days: 5
+
+      - name: Set status check to success
+        if: ${{ success() }}
+        uses: Sibz/github-status-action@v1.1.4
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ steps.vars.outputs.tag }}
+          context: ${{ env.check_name }}
+          description: Connectivity test successful
+          state: success
+          target_url: ${{ env.check_url }}
+
+      - name: Set status check to failure
+        if: ${{ failure() }}
+        uses: Sibz/github-status-action@v1.1.4
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ steps.vars.outputs.tag }}
+          context: ${{ env.check_name }}
+          description: Connectivity test failed
+          state: failure
+          target_url: ${{ env.check_url }}
+
+      - name: Set status check to cancelled
+        if: ${{ cancelled() }}
+        uses: Sibz/github-status-action@v1.1.4
+        with:
+          authToken: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ steps.vars.outputs.tag }}
+          context: ${{ env.check_name }}
+          description: Connectivity test cancelled
+          state: pending
+          target_url: ${{ env.check_url }}

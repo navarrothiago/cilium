@@ -24,6 +24,7 @@ require (
 	github.com/cilium/ipam v0.0.0-20201106170308-4184bc4bf9d6
 	github.com/cilium/proxy v0.0.0-20210304222512-e7430b113e09
 	github.com/cncf/udpa/go v0.0.0-20201211205326-cc1b757b3edd // indirect
+	github.com/containerd/cgroups v0.0.0-20210414185036-21be17332467 // indirect
 	github.com/containernetworking/cni v0.8.1
 	github.com/containernetworking/plugins v0.9.0
 	github.com/davecgh/go-spew v1.1.1
@@ -75,6 +76,8 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.1
+	github.com/spiffe/go-spiffe v1.1.0 // indirect
+	github.com/spiffe/go-spiffe/v2 v2.0.0-beta.5
 	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.1-0.20210324230033-66fce01bfa0e
 	github.com/vishvananda/netns v0.0.0-20201230012202-c4f3ca719c73
@@ -89,7 +92,7 @@ require (
 	golang.org/x/tools v0.1.0
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20200609130330-bd2cb7843e1b
 	google.golang.org/genproto v0.0.0-20210126160654-44e461bb6506
-	google.golang.org/grpc v1.29.1
+	google.golang.org/grpc v1.33.2
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/ini.v1 v1.62.0
@@ -121,3 +124,6 @@ replace (
 	// as to why we are using a private fork.
 	sigs.k8s.io/controller-tools => github.com/christarazi/controller-tools v0.3.1-0.20200911184030-7e668c1fb4c2
 )
+
+replace github.com/spiffe/go-spiffe/v2 => github.com/kinvolk/go-spiffe/v2 v2.0.0-beta.5.0.20210507201457-1f1f0e32b033
+replace google.golang.org/grpc v1.33.2 => google.golang.org/grpc v1.29.0

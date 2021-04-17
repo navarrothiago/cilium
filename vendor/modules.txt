@@ -179,6 +179,8 @@ github.com/cilium/proxy/go/envoy/type/v3
 ## explicit
 github.com/cncf/udpa/go/udpa/annotations
 github.com/cncf/udpa/go/xds/core/v3
+# github.com/containerd/cgroups v0.0.0-20210414185036-21be17332467
+## explicit
 # github.com/containernetworking/cni v0.8.1
 ## explicit
 github.com/containernetworking/cni/pkg/skel
@@ -605,6 +607,11 @@ github.com/spf13/pflag
 # github.com/spf13/viper v1.7.1
 ## explicit
 github.com/spf13/viper
+# github.com/spiffe/go-spiffe v1.1.0
+## explicit
+# github.com/spiffe/go-spiffe/v2 v2.0.0-beta.5 => github.com/kinvolk/go-spiffe/v2 v2.0.0-beta.5.0.20210507201457-1f1f0e32b033
+## explicit
+github.com/spiffe/go-spiffe/v2/proto/spiffe/workload
 # github.com/stretchr/testify v1.7.0
 ## explicit
 github.com/stretchr/testify/assert
@@ -829,7 +836,7 @@ google.golang.org/appengine/urlfetch
 ## explicit
 google.golang.org/genproto/googleapis/api/annotations
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.29.1
+# google.golang.org/grpc v1.33.2 => google.golang.org/grpc v1.29.0
 ## explicit
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -1326,3 +1333,4 @@ sigs.k8s.io/yaml
 # github.com/optiopay/kafka => github.com/cilium/kafka v0.0.0-20180809090225-01ce283b732b
 # go.universe.tf/metallb => github.com/cilium/metallb v0.1.1-0.20210402175553-310946fff4b4
 # sigs.k8s.io/controller-tools => github.com/christarazi/controller-tools v0.3.1-0.20200911184030-7e668c1fb4c2
+# github.com/spiffe/go-spiffe/v2 => github.com/kinvolk/go-spiffe/v2 v2.0.0-beta.5.0.20210507201457-1f1f0e32b033

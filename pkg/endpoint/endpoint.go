@@ -63,6 +63,9 @@ import (
 	"github.com/cilium/cilium/pkg/policy/trafficdirection"
 	"github.com/cilium/cilium/pkg/proxy/accesslog"
 	"github.com/cilium/cilium/pkg/trigger"
+	"github.com/spiffe/go-spiffe/v2/proto/spiffe/workload"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/sirupsen/logrus"
 
@@ -344,6 +347,9 @@ type Endpoint struct {
 	isHost bool
 
 	noTrackPort uint16
+
+	// Set of labels that correspond to SPIFFE IDs
+	spiffeIDs labels.Labels
 }
 
 // SetAllocator sets the identity allocator for this endpoint.
@@ -1186,6 +1192,78 @@ func (e *Endpoint) GetK8sNamespace() string {
 	return ns
 }
 
+func (e *Endpoint) startSpiffeIDsWatcher() error {
+	e.LogStatusOK(Other, "Start SpiffeID watcher")
+
+	// just in case
+	if e.pod == nil {
+		e.LogStatusOK(Other, "SpiffeID watcher: pod was nil")
+		return nil
+	}
+
+	go e.watchSpiffeIDs()
+	return nil
+}
+
+func (e *Endpoint) watchSpiffeIDs() {
+start_over:
+	stream, err := getStream(string(e.pod.UID))
+	if err != nil {
+		e.LogStatusOK(Other, fmt.Sprintf("get stream error: %v", err))
+		return
+	}
+
+	// TODO: how to break this loop?
+	for {
+		newSpiffeIds := labels.Labels{}
+		no_identity := false
+		svids := []*workload.X509SVID{}
+		resp, err := stream.Recv()
+		if err != nil {
+			if err2, ok := status.FromError(err); ok {
+				if err2.Code() == codes.PermissionDenied {
+					e.LogStatusOK(Other, "No identity issued. Trying again")
+					no_identity = true
+				}
+			}
+
+			if !no_identity {
+				e.LogStatus(Other, Warning, fmt.Sprintf("Failed to receive identities %s", err.Error()))
+				return
+			}
+		}
+
+		if !no_identity {
+			svids = resp.Svids
+		}
+
+		// build new labels
+		for _, svid := range svids {
+			e.LogStatusOK(Other, fmt.Sprintf("Processing SPIFFE-ID %q", svid.SpiffeId))
+			spiffeLabel := labels.NewLabel(svid.SpiffeId, "", "")
+			newSpiffeIds[spiffeLabel.Key] = spiffeLabel
+		}
+
+		if !newSpiffeIds.Equals(e.spiffeIDs) {
+			// Labels changed, calculate new ID
+			err := e.ModifyIdentityLabels(newSpiffeIds, e.spiffeIDs)
+			if err != nil {
+				// TODO: how to retry?
+				e.LogStatus(Other, Warning, fmt.Sprintf("Failed to update identity labels %s", err.Error()))
+				continue
+			}
+		}
+		e.spiffeIDs = newSpiffeIds
+
+		if no_identity {
+			// delay a bit before trying again
+			// TODO(Mauricio): Implement better backoff algorithm?
+			time.Sleep(1 * time.Second)
+			goto start_over
+		}
+	}
+}
+
 // SetPod sets the pod related to this endpoint.
 func (e *Endpoint) SetPod(pod *slim_corev1.Pod) {
 	e.unconditionalLock()
@@ -1607,6 +1685,10 @@ func (e *Endpoint) RunMetadataResolver(resolveMetadata MetadataResolverCB) {
 					return err
 				}
 				e.SetPod(pod)
+				err = e.startSpiffeIDsWatcher()
+				if err != nil {
+					return err
+				}
 				e.SetK8sMetadata(cp)
 				e.UpdateNoTrackRules(func(_, _ string) (noTrackPort string, err error) {
 					_, _, _, _, annotations, err := resolveMetadata(ns, podName)

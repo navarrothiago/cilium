@@ -152,9 +152,9 @@ type Requirement struct {
 func NewRequirement(key string, op selection.Operator, vals []string, opts ...field.PathOption) (*Requirement, error) {
 	var allErrs field.ErrorList
 	path := field.ToPath(opts...)
-	if err := validateLabelKey(key, path.Child("key")); err != nil {
-		allErrs = append(allErrs, err)
-	}
+	//	if err := validateLabelKey(key, path.Child("key")); err != nil {
+	//		allErrs = append(allErrs, err)
+	//	}
 
 	valuePath := path.Child("values")
 	switch op {

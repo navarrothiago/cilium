@@ -2760,6 +2760,23 @@ Secondary Interface %s :: IPv4: (%s, %s), IPv6: (%s, %s)`, helpers.DualStackSupp
 					testNodePort(true, false, false, 0) // no need to test from outside, as testDSR did it
 				})
 
+				It("Should not drop SCTP packets", func() {
+					vm1 := helpers.InitRuntimeHelper(helpers.K8s1VMName(), logger)
+					vm2 := helpers.InitRuntimeHelper(helpers.K8s2VMName(), logger)
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+
+					By("Running iperf3 server")
+					_ = vm1.ExecInBackground(ctx, "iperf3 -s")
+					serverIpAddress := vm1.Exec("ip a | grep enp0s8 | grep inet | awk '{print $2}' | awk -F/ '{print $1}'")
+
+					By(fmt.Sprintf("Running iperf3 client with IP server %s, SCTP protocol and 1MBytes to be sent", serverIpAddress.GetStdOut().ByLines()[0]))
+					res := vm2.Exec(fmt.Sprintf("iperf3 -c %s --sctp -n 100M -J | jq '.end.sum_received.bytes'", serverIpAddress.GetStdOut().ByLines()[0]))
+					receivedBytes, _ := strconv.Atoi(res.GetStdOut().ByLines()[0])
+
+					Expect(receivedBytes > 0).To(BeTrue())
+				})
+
 				SkipItIf(helpers.DoesNotExistNodeWithoutCilium, "Tests with XDP, direct routing, SNAT and Random", func() {
 					DeployCiliumOptionsAndDNS(kubectl, ciliumFilename, map[string]string{
 						"loadBalancer.acceleration": "testing-only",

@@ -83,6 +83,10 @@ type Secret struct {
 	Name string `json:"name"`
 }
 
+type Spiffe struct {
+	PeerIDs []string `json:"peerIDs"`
+}
+
 // TLSContext provides TLS configuration via reference to either k8s secrets
 // or via filepath. If both are set, directory is given priority over
 // k8sSecrets.
@@ -118,6 +122,9 @@ type TLSContext struct {
 	//
 	// +kubebuilder:validation:Optional
 	PrivateKey string `json:"privateKey,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	Spiffe *Spiffe `json:"spiffe"`
 }
 
 // PortRule is a list of ports/protocol combinations with optional Layer 7

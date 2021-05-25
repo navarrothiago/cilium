@@ -209,8 +209,9 @@ func StartEnvoy(stateDir, logPath string, baseID uint64) *Envoy {
 		defer logWriter.Close()
 
 		for {
-			logLevel := logging.GetLevel(logging.DefaultLogger)
-			cmd := exec.Command(ciliumEnvoy, "-l", mapLogLevel(logLevel), "-c", bootstrapPath, "--base-id", strconv.FormatUint(baseID, 10), "--log-format", logFormat)
+			// logLevel := logging.GetLevel(logging.DefaultLogger)
+			// cmd := exec.Command(ciliumEnvoy, "-l", mapLogLevel("trace"), "-c", bootstrapPath, "--base-id", strconv.FormatUint(baseID, 10), "--log-format", logFormat)
+			cmd := exec.Command(ciliumEnvoy, "-l", "trace", "-c", bootstrapPath, "--base-id", strconv.FormatUint(baseID, 10), "--log-format", logFormat)
 			cmd.Stderr = logWriter
 			cmd.Stdout = logWriter
 

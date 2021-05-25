@@ -1042,6 +1042,14 @@ func createBootstrap(filePath string, nodeId, cluster string, xdsSock, egressClu
 }
 
 func getCiliumTLSContext(tls *policy.TLSContext) *cilium.TLSContext {
+	if tls.Spiffe != nil {
+		return &cilium.TLSContext{
+			Spiffe: &cilium.Spiffe{
+				PeerIds: tls.Spiffe.PeerIDs,
+			},
+		}
+	}
+
 	return &cilium.TLSContext{
 		TrustedCa:        tls.TrustedCA,
 		CertificateChain: tls.CertificateChain,

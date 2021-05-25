@@ -311,6 +311,15 @@ spec:
                               this specifies the client-side TLS parameters for the
                               connection from the L7 proxy to the local endpoint.
                             properties:
+                              spiffe:
+                                description: spiffe peers this endpoint is able to communicate to
+                                properties:
+                                  peerIDs:
+                                    description: List of allowed Spiffe IDs
+                                    items:
+                                      type: string
+                                    type: array
+                                type: object
                               certificate:
                                 description: Certificate is the file name or k8s secret
                                   item name for the certificate chain. If omitted,
@@ -350,8 +359,8 @@ spec:
                                   is assumed, if it exists. If given, the item must
                                   exist.
                                 type: string
-                            required:
-                            - secret
+                            #required:
+                            #- secret
                             type: object
                           ports:
                             description: Ports is a list of L4 port/protocol

@@ -35,6 +35,7 @@ import (
 	"github.com/cilium/cilium/pkg/proxy/logger"
 	"github.com/cilium/cilium/pkg/revert"
 	"github.com/cilium/cilium/pkg/u8proto"
+	"github.com/spiffe/go-spiffe/v2/proto/spiffe/workload"
 	"gopkg.in/check.v1"
 )
 
@@ -74,6 +75,8 @@ func (r *RedirectSuiteProxy) UseCurrentNetworkPolicy(ep logger.EndpointUpdater, 
 
 // RemoveNetworkPolicy does nothing.
 func (r *RedirectSuiteProxy) RemoveNetworkPolicy(ep logger.EndpointInfoSource) {}
+
+func (f *RedirectSuiteProxy) UpdateSVIDs(id identity.NumericIdentity, svids []*workload.X509SVID) {}
 
 // DummyIdentityAllocatorOwner implements
 // pkg/identity/cache/IdentityAllocatorOwner. It is used for unit testing.

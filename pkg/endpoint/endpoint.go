@@ -350,6 +350,8 @@ type Endpoint struct {
 
 	// Set of labels that correspond to SPIFFE IDs
 	spiffeIDs labels.Labels
+
+	svids []*workload.X509SVID
 }
 
 // SetAllocator sets the identity allocator for this endpoint.
@@ -1244,6 +1246,9 @@ start_over:
 			newSpiffeIds[spiffeLabel.Key] = spiffeLabel
 		}
 
+		// assign here to be sure they're considered when calling sendSVIDs()
+		e.svids = svids
+
 		if !newSpiffeIds.Equals(e.spiffeIDs) {
 			// Labels changed, calculate new ID
 			err := e.ModifyIdentityLabels(newSpiffeIds, e.spiffeIDs)
@@ -1252,7 +1257,12 @@ start_over:
 				e.LogStatus(Other, Warning, fmt.Sprintf("Failed to update identity labels %s", err.Error()))
 				continue
 			}
+		} else {
+			// Labels are the same, it's just a cert rotation.
+			e.LogStatusOK(Other, fmt.Sprintf("Handling cert rotation"))
+			e.sendSVIDs()
 		}
+
 		e.spiffeIDs = newSpiffeIds
 
 		if no_identity {
@@ -1262,6 +1272,13 @@ start_over:
 			goto start_over
 		}
 	}
+}
+
+// Push current SVIDs to Envoy
+func (e *Endpoint) sendSVIDs() {
+	// TODO: how to lock?
+	// - this is called from SetIdentity that already has a lock...
+	e.proxy.UpdateSVIDs(e.getIdentity(), e.svids)
 }
 
 // SetPod sets the pod related to this endpoint.

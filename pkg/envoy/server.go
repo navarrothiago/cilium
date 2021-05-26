@@ -554,14 +554,15 @@ func (s *XDSServer) getListenerConf(name string, kind policy.L7ParserType, port 
 			Name: "envoy.filters.listener.tls_inspector",
 		}}, listenerConf.ListenerFilters...)
 
-		listenerConf.FilterChains = append(listenerConf.FilterChains, s.getHttpFilterChainProto(clusterName, false))
+		//listenerConf.FilterChains = append(listenerConf.FilterChains, s.getHttpFilterChainProto(tlsClusterName, false))
 
 		// Add a TLS variant
 		tlsClusterName := egressTLSClusterName
 		if isIngress {
 			tlsClusterName = ingressTLSClusterName
 		}
-		listenerConf.FilterChains = append(listenerConf.FilterChains, s.getHttpFilterChainProto(tlsClusterName, true))
+		// Add a filter that matches HTTP and uses an HTTPS egress cluster
+		listenerConf.FilterChains = append(listenerConf.FilterChains, s.getHttpFilterChainProto(tlsClusterName, false))
 	} else {
 		// Default TCP chain, takes care of all parsers in proxylib
 		listenerConf.FilterChains = append(listenerConf.FilterChains, s.getTcpFilterChainProto(clusterName, "", nil))

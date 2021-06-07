@@ -650,6 +650,15 @@ spec:
                               to be applied on the connections originated from a remote
                               source and terminated by the L7 proxy.
                             properties:
+                              spiffe:
+                                description: spiffe peers this endpoint is able to communicate to
+                                properties:
+                                  peerIDs:
+                                    description: List of allowed Spiffe IDs
+                                    items:
+                                      type: string
+                                    type: array
+                                type: object
                               certificate:
                                 description: Certificate is the file name or k8s secret
                                   item name for the certificate chain. If omitted,
@@ -689,8 +698,8 @@ spec:
                                   is assumed, if it exists. If given, the item must
                                   exist.
                                 type: string
-                            required:
-                            - secret
+                            #required:
+                            #- secret
                             type: object
                         type: object
                       type: array
@@ -1850,6 +1859,15 @@ spec:
                               to be applied on the connections originated from a remote
                               source and terminated by the L7 proxy.
                             properties:
+                              spiffe:
+                                description: spiffe peers this endpoint is able to communicate to
+                                properties:
+                                  peerIDs:
+                                    description: List of allowed Spiffe IDs
+                                    items:
+                                      type: string
+                                    type: array
+                                type: object
                               certificate:
                                 description: Certificate is the file name or k8s secret
                                   item name for the certificate chain. If omitted,
@@ -1889,8 +1907,8 @@ spec:
                                   is assumed, if it exists. If given, the item must
                                   exist.
                                 type: string
-                            required:
-                            - secret
+                            #required:
+                            #- secret
                             type: object
                         type: object
                       type: array

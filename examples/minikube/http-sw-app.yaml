@@ -7,6 +7,12 @@ spec:
   type: ClusterIP
   ports:
   - port: 80
+    # - name: http
+    #   protocol: TCP
+    #   port: 80
+    # - name: https
+    #   protocol: TCP
+    #   port: 443
   selector:
     org: empire
     class: deathstar
@@ -16,7 +22,7 @@ kind: Deployment
 metadata:
   name: deathstar
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       org: empire
@@ -30,6 +36,8 @@ spec:
       containers:
       - name: deathstar
         image: docker.io/cilium/starwars
+    nodeSelector:
+      - name: k8s2
 ---
 apiVersion: v1
 kind: Pod
@@ -54,3 +62,5 @@ spec:
   containers:
   - name: spaceship
     image: docker.io/tgraf/netperf
+  nodeSelector:
+    - name: k8s1

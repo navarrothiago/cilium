@@ -1,0 +1,20 @@
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: "tls-upgrade-deathstar"
+spec:
+  endpointSelector:
+    matchLabels:
+      class: deathstar
+  ingress:
+  - toPorts:
+    - ports:
+      - port: "80"
+        protocol: "TCP"
+      terminatingTLS:
+        spiffe:
+          peerIDs:
+            - spiffe://example.org/xwing
+      rules:
+        http:
+        - {}

@@ -326,17 +326,16 @@ func (l4 *L4Filter) GetIngress() bool {
 
 func (l4 *L4Filter) HasOriginatingTLS() bool {
 	for _, r := range l4.L7RulesPerSelector {
-		if r.OriginatingTLS != nil {
+		if r != nil && r.OriginatingTLS != nil {
 			return true
 		}
 	}
-
 	return false
 }
 
 func (l4 *L4Filter) HasTerminatingTLS() bool {
 	for _, r := range l4.L7RulesPerSelector {
-		if r.TerminatingTLS != nil {
+		if r != nil && r.TerminatingTLS != nil {
 			return true
 		}
 	}

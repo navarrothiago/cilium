@@ -1,0 +1,320 @@
+#  Based on cilium github actions.
+name: Self-host CI
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  push:
+    branches:
+      - github-workflow 
+      - knox-dev
+      
+concurrency:
+  group: (${{ github.workflow }}-${{ github.event.pull_request.number || github.event.pull_request.base.sha }})
+  cancel-in-progress: true
+  
+jobs:
+  build-and-push-prs:
+    if: ${{ github.repository == 'accuknox/cilium-private' }}
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - name: cilium
+            dockerfile: ./images/cilium/Dockerfile
+
+          - name: operator-generic
+            dockerfile: ./images/operator/Dockerfile
+
+          - name: hubble-relay
+            dockerfile: ./images/hubble-relay/Dockerfile
+
+          - name: clustermesh-apiserver
+            dockerfile: ./images/clustermesh-apiserver/Dockerfile
+
+          - name: docker-plugin
+            dockerfile: ./images/cilium-docker-plugin/Dockerfile
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e673438944759779e411a0f7ceef3ba437dccfa0
+
+      - name: Login to docker.io for CI
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: docker.io
+          username: ${{ secrets.QUAY_USERNAME_CI }}
+          password: ${{ secrets.QUAY_PASSWORD_CI }}
+
+      - name: Getting image tag
+        id: tag
+        run: |
+          if [ ${{ github.event.pull_request.head.sha }} != "" ]; then
+            echo ::set-output name=tag::${{ github.event.pull_request.head.sha }}
+          else
+            echo ::set-output name=tag::${{ github.sha }}
+          fi
+
+      - name: Checkout Source Code
+        uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
+        with:
+          persist-credentials: false
+          ref: ${{ steps.tag.outputs.tag }}
+
+      # master branch pushes
+      - name: CI Build ${{ matrix.name }}
+        if: ${{ github.event_name != 'pull_request_target' }}
+        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        id: docker_build_ci_master
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:latest
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}
+          build-args: |
+            OPERATOR_VARIANT=${{ matrix.name }}
+
+      - name: CI race detection Build ${{ matrix.name }}
+        if: ${{ github.event_name != 'pull_request_target' }}
+        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        id: docker_build_ci_master_detect_race_condition
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64
+          tags: |
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:latest-race
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}-race
+          build-args: |
+            BASE_IMAGE=quay.io/cilium/cilium-runtime:28b5a8658b596d12d80b0e7dad3efc2e77ec2d65@sha256:fbf8eee141101fade247dbe94cf84ca3bdcd92b96108996c50859ab7edd607d0
+            LOCKDEBUG=1
+            RACE=1
+            OPERATOR_VARIANT=${{ matrix.name }}
+
+      - name: CI Image Releases digests
+        if: ${{ github.event_name != 'pull_request_target' }}
+        shell: bash
+        run: |
+          mkdir -p image-digest/
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:latest@${{ steps.docker_build_ci_master.outputs.digest }}" > image-digest/${{ matrix.name }}.txt
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:latest-race@${{ steps.docker_build_ci_master_detect_race_condition.outputs.digest }}" >> image-digest/${{ matrix.name }}.txt
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}@${{ steps.docker_build_ci_master.outputs.digest }}" >> image-digest/${{ matrix.name }}.txt
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}-race@${{ steps.docker_build_ci_master_detect_race_condition.outputs.digest }}" >> image-digest/${{ matrix.name }}.txt
+
+      # PR updates
+      - name: CI Build ${{ matrix.name }}
+        if: ${{ github.event_name == 'pull_request_target' }}
+        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        id: docker_build_ci_pr
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}
+          build-args: |
+            OPERATOR_VARIANT=${{ matrix.name }}
+
+      - name: CI Image Releases digests
+        if: ${{ github.event_name == 'pull_request_target' }}
+        shell: bash
+        run: |
+          mkdir -p image-digest/
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}@${{ steps.docker_build_ci_pr.outputs.digest }}" > image-digest/${{ matrix.name }}.txt
+
+      - name: CI race detection Build ${{ matrix.name }}
+        if: ${{ github.event_name == 'pull_request_target' }}
+        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        id: docker_build_ci_pr_detect_race_condition
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64
+          tags: |
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}-race
+          build-args: |
+            BASE_IMAGE=quay.io/cilium/cilium-runtime:28b5a8658b596d12d80b0e7dad3efc2e77ec2d65@sha256:fbf8eee141101fade247dbe94cf84ca3bdcd92b96108996c50859ab7edd607d0
+            LOCKDEBUG=1
+            RACE=1
+            OPERATOR_VARIANT=${{ matrix.name }}
+
+      - name: CI Image Releases digests
+        if: ${{ github.event_name == 'pull_request_target' }}
+        shell: bash
+        run: |
+          mkdir -p image-digest/
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}@${{ steps.docker_build_ci_pr.outputs.digest }}" >> image-digest/${{ matrix.name }}.txt
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ steps.tag.outputs.tag }}-race@${{ steps.docker_build_ci_pr_detect_race_condition.outputs.digest }}" >> image-digest/${{ matrix.name }}.txt
+
+      # Upload artifact digests
+      - name: Upload artifact digests
+        uses: actions/upload-artifact@27121b0bdffd731efa15d66772be8dc71245d074
+        with:
+          name: image-digest ${{ matrix.name }}
+          path: image-digest
+          retention-days: 1
+
+  # we need to build cilium-test separately
+  # this is caused by running apt while building the image
+  # which requires qemu setup in order to avoid x86/arm64 binaries mixups
+  # note: we only build on pushes to master branch
+  build-and-push-with-qemu:
+    if: ${{ github.repository == 'accuknox/cilium-private' && github.event_name == 'push' }}
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - name: cilium-test
+            dockerfile: ./images/cilium-test/Dockerfile
+
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@27d0a4f181a40b142cce983c5393082c365d1480
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e673438944759779e411a0f7ceef3ba437dccfa0
+
+      - name: Login to docker.io for CI
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: docker.io
+          username: ${{ secrets.QUAY_USERNAME_CI }}
+          password: ${{ secrets.QUAY_PASSWORD_CI }}
+
+      - name: Checkout Source Code
+        uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: CI Build ${{ matrix.name }}
+        uses: docker/build-push-action@1bc1040caef9e604eb543693ba89b5bf4fc80935
+        id: docker_build_ci_master
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:latest
+            docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ github.sha }}
+
+      - name: CI Image Releases digests
+        shell: bash
+        run: |
+          mkdir -p image-digest/
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:latest@${{ steps.docker_build_ci_master.outputs.digest }}" > image-digest/${{ matrix.name }}.txt
+          echo "docker.io/${{ github.repository_owner }}/${{ matrix.name }}-ci:${{ github.sha }}@${{ steps.docker_build_ci_master.outputs.digest }}" >> image-digest/${{ matrix.name }}.txt
+
+      # Upload artifact digests
+      - name: Upload artifact digests
+        uses: actions/upload-artifact@27121b0bdffd731efa15d66772be8dc71245d074
+        with:
+          name: image-digest ${{ matrix.name }}
+          path: image-digest
+          retention-days: 1
+
+      - name: Send slack notification
+        if: ${{ (cancelled() || failure()) && (github.event_name == 'schedule' || github.event_name == 'push') }}
+        uses: 8398a7/action-slack@dcc8c8e9dd8802e21a712dc0c003db97b42efe43
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took # selectable (default: repo,message)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  image-digests:
+    if: ${{ always() && github.repository == 'accuknox/cilium-private' &&
+      (needs.build-and-push-with-qemu.result == 'success' || needs.build-and-push-with-qemu.result == 'skipped') }}
+    name: Display Digests
+    runs-on: ubuntu-20.04
+    needs: [build-and-push-prs, build-and-push-with-qemu]
+    steps:
+      - name: Downloading Image Digests
+        shell: bash
+        run: |
+          mkdir -p image-digest/
+
+      - name: Download digests of all images built
+        uses: actions/download-artifact@3be87be14a055c47b01d3bd88f8fe02320a9bb60
+        with:
+          path: image-digest/
+
+      - name: Image Digests Output
+        shell: bash
+        run: |
+          cd image-digest/
+          find -type f | sort | xargs -d '\n' cat
+  ci:
+    if: |
+      (github.event_name == 'issue_comment' && (
+        (startsWith(github.event.comment.body, 'test-ci'))
+      )) ||
+      (github.event_name == 'schedule' && github.repository == 'accuknox/cilium-private') ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'push'
+    runs-on: self-hosted
+    needs: build-and-push-prs
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - name: Create ssh-config
+      run: |
+        echo "Host k8s1-1.22" > ssh-config
+        echo "  HostName 127.0.0.1" >> ssh-config
+        echo "  User navarro" >> ssh-config
+        echo "  UserKnownHostsFile /dev/null" >> ssh-config
+        echo "  StrictHostKeyChecking no" >> ssh-config
+        echo "  PasswordAuthentication no" >> ssh-config
+        echo "  IdentityFile /home/navarro/.ssh/github-actions" >> ssh-config
+        echo "  IdentitiesOnly yes" >> ssh-config
+        echo "  LogLevel FATAL" >> ssh-config
+    - name: Run ginkgo tests
+      run: |
+        cd test
+        #ginkgo --focus="K8s.*without policy$" -- -cilium.SSHConfig="cat ssh-config" -cilium.provision=false -cilium.kubeconfig=`echo ~/.kube/config` -cilium.image="docker.io/accuknox/cilium-dev" -cilium.tag="identity-soln" -cilium.operator-image="docker.io/accuknox/operator" -cilium.operator-tag="identity-soln" -cilium.passCLIEnvironment=true
+        #VM_CPUS=4 NETNEXT=1 K8S_NODES=1 ginkgo --focus="K8s.*" -v -- --cilium.provision=true --cilium.skipLogs=true -cilium.showCommands=true
+        ginkgo --focus="K8sDemo" --tags=integration_tests -- -cilium.provision=false -cilium.kubeconfig=`echo ~/.kube/config` -cilium.image="docker.io/accuknox/cilium-ci" -cilium.tag=${GITHUB_SHA} -cilium.operator-image="docker.io/accuknox/operator" -cilium.operator-tag=${GITHUB_SHA} -cilium.operator-suffix="-ci" -cilium.hubble-relay-image="docker.io/accuknox/hubble-relay-ci" -cilium.hubble-relay-tag=${GITHUB_SHA} -cilium.passCLIEnvironment=true
+  clean-up:
+    if: |
+      always() && (github.event_name == 'issue_comment' && (
+        (startsWith(github.event.comment.body, 'test-ci'))
+      )) ||
+      (github.event_name == 'schedule' && github.repository == 'accuknox/cilium-private') ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'push'
+    needs: ci
+    runs-on: self-hosted
+    steps:
+    - name: Destroy VMs
+      run : |
+        cd test
+        vagrant destroy -f
+        sudo bash -c "echo "" >  /etc/exports"
+    - name: Reset cluster
+      run: |
+        sudo systemctl restart docker.service
+        sudo kubeadm reset -f
+        sudo rm -R  $HOME/.kube
+        sudo kubeadm init > /dev/null
+        mkdir -p $HOME/.kube
+        sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+        sudo chown $(id -u):$(id -g) $HOME/.kube/config
+        kubectl scale deployments.apps -n kube-system coredns --replicas=1
+        kubectl taint nodes nested-vm node-role.kubernetes.io/master-
+        kubectl label nodes nested-vm cilium.io/ci-node=k8s1
+    - name: Clean working directory
+      shell: bash
+      run: |
+        cd $RUNNER_WORKSPACE
+        cd ..
+        rm -r *

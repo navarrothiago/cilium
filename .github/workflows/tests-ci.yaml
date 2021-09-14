@@ -280,7 +280,7 @@ jobs:
         cd test
         #ginkgo --focus="K8s.*without policy$" -- -cilium.SSHConfig="cat ssh-config" -cilium.provision=false -cilium.kubeconfig=`echo ~/.kube/config` -cilium.image="docker.io/accuknox/cilium-dev" -cilium.tag="identity-soln" -cilium.operator-image="docker.io/accuknox/operator" -cilium.operator-tag="identity-soln" -cilium.passCLIEnvironment=true
         #VM_CPUS=4 NETNEXT=1 K8S_NODES=1 ginkgo --focus="K8s.*" -v -- --cilium.provision=true --cilium.skipLogs=true -cilium.showCommands=true
-        ginkgo --focus="K8sDemo" --tags=integration_tests -- -cilium.provision=false -cilium.kubeconfig=`echo ~/.kube/config` -cilium.image="docker.io/accuknox/cilium-ci" -cilium.tag=${GITHUB_SHA} -cilium.operator-image="docker.io/accuknox/operator" -cilium.operator-tag=${GITHUB_SHA} -cilium.operator-suffix="-ci" -cilium.hubble-relay-image="docker.io/accuknox/hubble-relay-ci" -cilium.hubble-relay-tag=${GITHUB_SHA} -cilium.passCLIEnvironment=true
+        ginkgo --focus="K8s" --tags=integration_tests -- -cilium.provision=false -cilium.kubeconfig=`echo ~/.kube/config` -cilium.image="docker.io/accuknox/cilium-ci" -cilium.tag=${GITHUB_SHA} -cilium.operator-image="docker.io/accuknox/operator" -cilium.operator-tag=${GITHUB_SHA} -cilium.operator-suffix="-ci" -cilium.hubble-relay-image="docker.io/accuknox/hubble-relay-ci" -cilium.hubble-relay-tag=${GITHUB_SHA} -cilium.passCLIEnvironment=true
   clean-up:
     if: |
       always() && (github.event_name == 'issue_comment' && (

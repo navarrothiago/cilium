@@ -1,11 +1,8 @@
 #  Based on cilium github actions.
 name: Self-host CI
 on:
-  pull_request_target:
-    types:
-      - opened
-      - synchronize
-      - reopened
+  
+  pull_request_target: {}
   push:
     branches:
       - github-workflow 
